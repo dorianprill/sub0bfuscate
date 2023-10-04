@@ -3,7 +3,7 @@
 ## Turn *all* arithmetic operations into subtractions of 0.0 and -0.0 and an additional constant 0
 
 ## Inspiration
-[Tom Murphy VII](http://tom7.org/nand/nand.pdf) and [Orson Peters](https://orlp.net/blog/subtraction-is-functionally-complete/) (the basic implementation is adapted from his code) for the original research (although it may have been known before, it was new to me) and [u/MyOthrUsrnmIsABook](https://www.reddit.com/user/MyOthrUsrnmIsABook/) for the not-quite-serious idea of actually using it. I'm just trying to be the dummy who actually follows through with it.
+[Tom Murphy VII](http://tom7.org/nand/nand.pdf) and [Orson Peters](https://orlp.net/blog/subtraction-is-functionally-complete/) (the basic implementation is continued from his code) for the original research (although it may have been known before, it was new to me) and [u/MyOthrUsrnmIsABook](https://www.reddit.com/user/MyOthrUsrnmIsABook/) for the not-quite-serious idea of actually using it. I'm just trying to be the dummy who actually follows through with it.
 
 ## Principle
 
@@ -38,25 +38,30 @@ It is well established in computer science that the only boolean operators that 
 
 Now, since we found out that subtraction of the two distinct IEEE754 floating point zeros {0.0, -0.0} produces an IMPLY gate, we can check for a minimal set involving IMPLY that is functionally complete. 
 
-### Functional Completeness of $\{\rightarrow, 0\}$
+### Functional Completeness of {IMPLY, 0}
 The set 
 
-$$\{\rightarrow, 0\}$$
+$$ 
+\{\rightarrow, 0\} 
+$$
 
  (read: IMPLICATION and a constant FALSE) is functionally complete. Interestingly, that is not the case for $\{\rightarrow, 0\}$ but I'll leave the proof up to you. When you have the IMPLY gate and a constant, it is possible to build other gates from which you can derive any Boolean function. We can prove this by building the set $\{\land, \neg\}$ from $\{\rightarrow, 0\}$ since we already know the former to be complete.    
 
 
 Given that the IMPLY operation can be defined as:
+
 $$
 P \rightarrow Q = \neg P ~ \lor ~ Q
 $$
 
 We have a particular scenario when we replace Q with a constant FALSE (0):
+
 $$ 
 P \rightarrow 0 = \neg P ~ \lor ~ 0
 $$
 
 Since OR with FALSE does not change the value of the other operand:
+
 $$
 P \rightarrow 0 = \neg P
 $$
@@ -65,6 +70,7 @@ Therefore, we can use an IMPLY gate with the second input fixed to 0 (FALSE) to 
 
 
 Now, let's find a way to express AND using NOT and IMPLY. Using De Morgan’s laws, AND can be written in terms of NOT and OR:
+
 $$
 P \land Q = \neg (\neg P \lor \neg Q) 
 $$
@@ -108,7 +114,7 @@ $$
 
 We have now expressed $\{\land, \neg\}$ ($AND$ and $NOT$) using only $\{\rightarrow, 0\}$.
 
-This proves that $\{ \rightarrow, 0 \}$ is indeed functionally complete because we can derive the necessary logical operations $\{\land, \neg\}$ from it, which can directly be used to construct any Boolean function.  
+This proves that $ \{ \rightarrow, 0 \} $ is indeed functionally complete because we can derive the necessary logical operations $ \{ \land, \neg \} $ from it, which can directly be used to construct any Boolean function.  
 Since computers are built using boolean logic, this in turn means that any arithmetic operation can be expressed using only subtraction of the two distinct IEEE754 floating point zeros (with the technical nitpick that you need an additional constant 0 as input, which is still kind of beautiful because the only constant you need is still a zero).
 
 
@@ -147,5 +153,6 @@ After doing all this, we can now potentially replace _EVERY_ arithmetic operatio
 
 ## Status
 The obfuscator part is not fleshed out yet, I'm still working on the basic building blocks of arithmetic.
+It will probably involve rummaging around in LLVM IR, replacing arithmetic ops with function calls.
 
 
