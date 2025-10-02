@@ -2,10 +2,18 @@ type Bit = f32;
 const ZERO: Bit = -0.0;
 const ONE: Bit = 0.0;
 
-fn not(x: Bit) -> Bit { ZERO - x }
-fn or(a: Bit, b: Bit) -> Bit { a - not(b) }
-fn and(a: Bit, b: Bit) -> Bit { not(or(not(a), not(b))) }
-fn xor(a: Bit, b: Bit) -> Bit { or(and(not(a), b), and(a, not(b))) }
+fn not(x: Bit) -> Bit {
+    ZERO - x
+}
+fn or(a: Bit, b: Bit) -> Bit {
+    a - not(b)
+}
+fn and(a: Bit, b: Bit) -> Bit {
+    not(or(not(a), not(b)))
+}
+fn xor(a: Bit, b: Bit) -> Bit {
+    or(and(not(a), b), and(a, not(b)))
+}
 fn adder(a: Bit, b: Bit, c: Bit) -> (Bit, Bit) {
     let s = xor(xor(a, b), c);
     let c = or(and(xor(a, b), c), and(a, b));
@@ -18,6 +26,8 @@ fn adder(a: Bit, b: Bit, c: Bit) -> (Bit, Bit) {
 type SoftU8 = [Bit; 8];
 
 type SoftU23 = [Bit; 23];
+
+type SoftU24 = [Bit; 24]; // used for addition and normalization
 
 type SoftU32 = [Bit; 32];
 
@@ -34,14 +44,11 @@ pub fn softu32_add(a: SoftU32, b: SoftU32) -> SoftU32 {
     result
 }
 
-
 struct SofterF32 {
     sign: Bit,
     exponent: [Bit; 8],
     fraction: [Bit; 23],
 }
-
-
 
 pub fn softu8_add(a: SoftU8, b: SoftU8) -> SoftU8 {
     let (s0, c) = adder(a[0], b[0], ZERO);
@@ -60,9 +67,50 @@ pub fn to_softu8(x: u8) -> SoftU8 {
 }
 
 pub fn from_softu8(x: SoftU8) -> u8 {
-    (0..8).filter(|i| x[*i].signum() > 0.0).map(|i| 1 << i).sum()
+    (0..8)
+        .filter(|i| x[*i].signum() > 0.0)
+        .map(|i| 1 << i)
+        .sum()
 }
 
+fn with_implicit(frac: SoftU23, exp: SoftU8) -> SoftU24 {
+    // LSB-first: indices 0..22 are fraction bits, index 23 is the implicit 1 for normals
+    let mut sig: SoftU24 = [ZERO; 24];
+    for i in 0..23 {
+        sig[i] = frac[i];
+    }
+    sig[23] = if from_softu8(exp) != 0 { ONE } else { ZERO }; // 0 for subnormals/zero
+    sig
+}
+
+fn drop_implicit(sig: SoftU24) -> SoftU23 {
+    // drop the top implicit bit; keep the lower 23 as stored fraction
+    let mut frac: SoftU23 = [ZERO; 23];
+    for i in 0..23 {
+        frac[i] = sig[i];
+    }
+    frac
+}
+
+fn softu24_add(a: SoftU24, b: SoftU24) -> (SoftU24, Bit) {
+    let mut result = [ZERO; 24];
+    let mut carry = ZERO;
+    for i in 0..24 {
+        let (sum, new_carry) = adder(a[i], b[i], carry);
+        result[i] = sum;
+        carry = new_carry;
+    }
+    (result, carry)
+}
+
+fn shift_right24(x: SoftU24) -> SoftU24 {
+    let mut result = [ZERO; 24];
+    for i in 0..23 {
+        result[i] = x[i + 1];
+    }
+    result[23] = ZERO;
+    result
+}
 
 impl SofterF32 {
     fn to_f32(&self) -> f32 {
@@ -78,7 +126,11 @@ impl SofterF32 {
         let sign = if bits & (1 << 31) == 0 { ONE } else { ZERO };
         let exponent = to_softu8(((bits >> 23) & 0xFF) as u8);
         let fraction = to_softu23(bits & 0x7FFFFF);
-        SofterF32 { sign, exponent, fraction }
+        SofterF32 {
+            sign,
+            exponent,
+            fraction,
+        }
     }
 }
 
@@ -89,10 +141,11 @@ fn to_softu23(x: u32) -> [Bit; 23] {
 
 /// Converts a mantissa Bit-array from our SofterF32 type into a u32
 fn from_softu23(x: [Bit; 23]) -> u32 {
-    (0..23).filter(|i| x[*i].signum() > 0.0).map(|i| 1 << i).sum()
+    (0..23)
+        .filter(|i| x[*i].signum() > 0.0)
+        .map(|i| 1 << i)
+        .sum()
 }
-
-
 
 // Convert a regular f32 to a SofterF32 representation
 fn to_softerf32(x: f32) -> SofterF32 {
@@ -100,9 +153,10 @@ fn to_softerf32(x: f32) -> SofterF32 {
     let sign_bit = if bits >> 31 == 0 { ONE } else { ZERO };
     let exponent_bits = to_softu8(((bits >> 23) & 0xFF) as u8);
     let mut fraction_bits = [ZERO; 23];
-    if from_softu8(exponent_bits) != 0 {  // Check for non-zero exponent (ignoring denormalized numbers)
-        fraction_bits[22] = ONE;  // Set the implicit bit
-    }
+    // if from_softu8(exponent_bits) != 0 {
+    //     // Check for non-zero exponent (ignoring denormalized numbers)
+    //     fraction_bits[22] = ONE; // Set the implicit bit
+    // }
     for i in 0..23 {
         fraction_bits[i] = if (bits >> i) & 1 == 1 { ONE } else { ZERO };
     }
@@ -129,78 +183,67 @@ fn from_softerf32(x: SofterF32) -> f32 {
     f32::from_bits(bits)
 }
 
-fn softu23_add(a: SoftU23, b: SoftU23) -> SoftU23 {
+fn softu23_add(a: SoftU23, b: SoftU23) -> (SoftU23, Bit) {
     let mut result = [ZERO; 23];
     let mut carry = ZERO;
-
-    for i in (0..23).rev() {
+    for i in 0..23 {
         let (sum, new_carry) = adder(a[i], b[i], carry);
         result[i] = sum;
         carry = new_carry;
     }
-
-    result
+    (result, carry)
 }
-
-
 
 fn softerf32_add(a: SofterF32, b: SofterF32) -> SofterF32 {
-    let mut result = SofterF32 { sign: ONE, exponent: [ZERO; 8], fraction: [ZERO; 23] };
+    // (still assumes same sign; subtraction/opp signs can come later)
+    let mut a_exp = from_softu8(a.exponent) as i32;
+    let mut b_exp = from_softu8(b.exponent) as i32;
 
-    let mut a_exp = from_softu8(a.exponent) as isize;
-    let mut b_exp = from_softu8(b.exponent) as isize;
+    let mut a_sig = with_implicit(a.fraction, a.exponent);
+    let mut b_sig = with_implicit(b.fraction, b.exponent);
 
-    // Copies for adjusting the fractions without mutating the original parameters
-    let mut a_fraction = a.fraction;
-    let mut b_fraction = b.fraction;
-
-    // Align the numbers by exponents.
-    let diff = a_exp - b_exp;
-    if diff > 0 {
-        for _ in 0..diff {
-            b_fraction = shift_right(b_fraction); // Shift 'b' instead of 'a'
+    // align by shifting the one with the smaller exponent
+    if a_exp > b_exp {
+        for _ in 0..(a_exp - b_exp) {
+            b_sig = shift_right24(b_sig);
         }
-    } else {
-        for _ in 0..-diff {
-            a_fraction = shift_right(a_fraction); // Shift 'a'
+    } else if b_exp > a_exp {
+        for _ in 0..(b_exp - a_exp) {
+            a_sig = shift_right24(a_sig);
         }
     }
+    let mut exp = a_exp.max(b_exp);
 
-    
-    // After aligning by exponents in softerf32_add
-    println!("A mantissa after alignment: {:?}", a_fraction);
-    println!("B mantissa after alignment: {:?}", b_fraction);
-    
-    // Set implicit bits immediately after conversion
-    a_fraction[22] = if from_softu8(a.exponent) == 0 { ZERO } else { ONE };
-    b_fraction[22] = if from_softu8(b.exponent) == 0 { ZERO } else { ONE };
+    // add
+    let (mut sum, carry) = softu24_add(a_sig, b_sig);
 
-    // Add the mantissas. Assuming they have the same sign for simplicity.
-    let mantissa_sum = softu23_add(a_fraction, b_fraction);
-    if is_overflow(mantissa_sum) {
-        result.fraction = shift_right(mantissa_sum);
-        a_exp += 1;
+    // if carry out, normalize by shifting right once and increment exponent
+    if carry.signum() > 0.0 {
+        sum = shift_right24(sum);
+        exp += 1;
     } else {
-        result.fraction = mantissa_sum;
+        // ensure the top bit is the implicit leading 1 for normals; if it isn’t,
+        // you could add a simple left-normalize loop here. for now we keep it minimal.
     }
-    
-    // After adding mantissas
-    println!("Mantissa sum: {:?}", mantissa_sum);
 
-    result.exponent = to_softu8(a_exp as u8);
-    result.sign = a.sign;  // Assuming same sign for simplicity.
+    // pack back: drop the implicit 1 from the stored fraction
+    let fraction = drop_implicit(sum);
 
-    // This is a very basic version and does not handle normalization, rounding, etc.
-    result
+    SofterF32 {
+        sign: a.sign,                   // same-sign fast path
+        exponent: to_softu8(exp as u8), // max exponent (plus any normalization bump)
+        fraction,
+    }
 }
-
 
 fn shift_right(x: [Bit; 23]) -> [Bit; 23] {
     let mut result = [ZERO; 23];
-    for i in (1..23).rev() {
-        result[i] = x[i - 1];
+    // right shift: bit i+1 -> i
+    for i in 0..22 {
+        result[i] = x[i + 1];
     }
-    result[0] = ZERO;
+    // highest bit gets zero on logical right shift
+    result[22] = ZERO;
     result
 }
 
@@ -209,20 +252,19 @@ fn is_overflow(x: [Bit; 23]) -> bool {
     x[22].signum() > 0.0
 }
 
-
 fn main() {
     // compute SoftInt sum on the FPU
     let a = to_softu8(23);
     let b = to_softu8(19);
-    println!("{}", from_softu8(softu8_add(a, b)));  // Outputs: 42
+    println!("{}", from_softu8(softu8_add(a, b))); // Outputs: 42
 
     // compute SofterFloat sum with SoftInts
-    let f1 = 2.0f32; 
+    let f1 = 2.0f32;
     let f2 = 1.8f32;
 
     let a_f32 = to_softerf32(f1);
     let b_f32 = to_softerf32(f2);
     let sum_f32 = softerf32_add(a_f32, b_f32);
 
-    println!("{:.2}", from_softerf32(sum_f32));  // Outputs a result close to 3.8
+    println!("{:.2}", from_softerf32(sum_f32)); // Outputs a result close to 3.8
 }
