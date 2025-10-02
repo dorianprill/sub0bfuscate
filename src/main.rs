@@ -31,17 +31,15 @@ type SoftU24 = [Bit; 24]; // used for addition and normalization
 
 type SoftU32 = [Bit; 32];
 
-pub fn softu32_add(a: SoftU32, b: SoftU32) -> SoftU32 {
-    let mut result = [ZERO; 32];
+pub fn softu32_add(a: SoftU32, b: SoftU32) -> (SoftU32, Bit) {
+    let mut out = [ZERO; 32];
     let mut carry = ZERO;
-
     for i in 0..32 {
-        let (sum, new_carry) = adder(a[i], b[i], carry);
-        result[i] = sum;
-        carry = new_carry;
+        let (s, c) = adder(a[i], b[i], carry);
+        out[i] = s;
+        carry = c;
     }
-
-    result
+    (out, carry)
 }
 
 struct SofterF32 {
@@ -71,6 +69,61 @@ pub fn from_softu8(x: SoftU8) -> u8 {
         .filter(|i| x[*i].signum() > 0.0)
         .map(|i| 1 << i)
         .sum()
+}
+
+#[inline(always)]
+fn to_soft_bit(bit_is_one: bool) -> Bit {
+    if bit_is_one {
+        ONE
+    } else {
+        ZERO
+    }
+}
+
+#[inline(always)]
+pub fn to_softu24(x: u32) -> SoftU24 {
+    let mut out = [ZERO; 24];
+    for i in 0..24 {
+        out[i] = to_soft_bit(((x >> i) & 1) != 0); // LSB -> index 0
+    }
+    out
+}
+
+#[inline(always)]
+pub fn to_softu32(x: u32) -> SoftU32 {
+    let mut out = [ZERO; 32];
+    for i in 0..32 {
+        out[i] = to_soft_bit(((x >> i) & 1) != 0); // LSB -> index 0
+    }
+    out
+}
+
+#[inline(always)]
+fn is_one(b: Bit) -> bool {
+    // +0.0 has sign bit 0; -0.0 has sign bit 1
+    (b.to_bits() >> 31) == 0
+}
+
+#[inline(always)]
+pub fn from_softu24(a: SoftU24) -> u32 {
+    let mut v = 0u32;
+    for i in 0..24 {
+        if is_one(a[i]) {
+            v |= 1u32 << i;
+        }
+    }
+    v
+}
+
+#[inline(always)]
+pub fn from_softu32(a: SoftU32) -> u32 {
+    let mut v = 0u32;
+    for i in 0..32 {
+        if is_one(a[i]) {
+            v |= 1u32 << i;
+        }
+    }
+    v
 }
 
 fn with_implicit(frac: SoftU23, exp: SoftU8) -> SoftU24 {
@@ -267,4 +320,81 @@ fn main() {
     let sum_f32 = softerf32_add(a_f32, b_f32);
 
     println!("{:.2}", from_softerf32(sum_f32)); // Outputs a result close to 3.8
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn add_softu8_simple() {
+        let a = to_softu8(23);
+        let b = to_softu8(19);
+        let c = softu8_add(a, b);
+        let c_u8 = from_softu8(c);
+        assert_eq!(c_u8, 42);
+    }
+
+    #[test]
+    fn add_softu23_simple() {
+        let a = to_softu23(0b10101); // 21
+        let b = to_softu23(0b01011); // 11
+        let (c, carry) = softu23_add(a, b);
+        let c_u32 = from_softu23(c) + if carry.signum() > 0.0 { 1 << 23 } else { 0 };
+        assert_eq!(c_u32, 32);
+    }
+
+    #[test]
+    fn add_softu24_simple() {
+        // 21 + 11 = 32 (small, easy sanity check; LSB-first representation)
+        let a = to_softu24(0b10101); // 21
+        let b = to_softu24(0b01011); // 11
+        let (c, carry) = softu24_add(a, b);
+        let c_u32 = from_softu24(c) + if carry.signum() > 0.0 { 1 << 24 } else { 0 };
+        assert_eq!(c_u32, 32);
+    }
+
+    #[test]
+    fn add_softu24_carry_out() {
+        // (2^24 - 1) + 1 = 2^24 -> result wraps to 0 with carry=1
+        let a = to_softu24((1u32 << 24) - 1);
+        let b = to_softu24(1);
+        let (c, carry) = softu24_add(a, b);
+        assert_eq!(from_softu24(c), 0);
+        assert!(
+            carry.signum() > 0.0,
+            "expected carry-out=1 (negative zero), got {:?}",
+            carry
+        );
+    }
+
+    #[test]
+    fn add_softu32_simple() {
+        // 23 + 19 = 42
+        let a = to_softu32(23);
+        let b = to_softu32(19);
+        let (c, carry) = softu32_add(a, b);
+        let sum = (from_softu32(c) as u64) + if carry.signum() > 0.0 { 1u64 << 32 } else { 0 };
+        assert_eq!(sum, 42);
+        assert!(!(carry.signum() > 0.0), "no carry expected");
+    }
+
+    #[test]
+    fn add_softu32_carry_out() {
+        // u32::MAX + 1 = 2^32 -> wraps to 0 with carry=1
+        let a = to_softu32(u32::MAX);
+        let b = to_softu32(1);
+        let (c, carry) = softu32_add(a, b);
+        assert_eq!(from_softu32(c), 0);
+        assert!(carry.signum() > 0.0, "expected carry-out=1 (negative zero)");
+    }
+
+    #[test]
+    fn add_softerf32_simple() {
+        let a = to_softerf32(17.3);
+        let b = to_softerf32(24.7);
+        let c = softerf32_add(a, b);
+        let c_f32 = from_softerf32(c);
+        assert!((c_f32 - 42.0).abs() < 0.001);
+    }
 }
