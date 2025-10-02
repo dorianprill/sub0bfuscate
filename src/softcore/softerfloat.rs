@@ -10,6 +10,7 @@ pub struct SofterF32 {
 }
 
 // pack/unpack with your existing approach
+#[allow(clippy::needless_range_loop)]
 pub fn to_softerf32(x: f32) -> SofterF32 {
     let bits = x.to_bits();
     let sign = if (bits >> 31) != 0 { ZERO } else { ONE }; // - => 0, + => 1
@@ -43,6 +44,7 @@ pub fn from_softerf32(s: SofterF32) -> f32 {
 }
 
 // simple add (same-sign fast path), using 24-bit significands — minimal from earlier
+#[allow(clippy::comparison_chain)]
 pub fn softerf32_add(a: SofterF32, b: SofterF32) -> SofterF32 {
     let a_exp = from_softu8(a.exponent) as i32;
     let b_exp = from_softu8(b.exponent) as i32;

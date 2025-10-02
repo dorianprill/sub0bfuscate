@@ -10,6 +10,7 @@ pub type SoftU32 = [Bit; 32];
 // --- encode/decode ---
 
 #[inline(always)]
+#[allow(clippy::needless_range_loop)]
 pub fn to_softu_generic<const N: usize>(x: u64) -> [Bit; N] {
     let mut out = [ZERO; N];
     for i in 0..N {
@@ -36,6 +37,7 @@ pub fn to_softu32(x: u32) -> SoftU32 {
 }
 
 #[inline(always)]
+#[allow(clippy::needless_range_loop)]
 pub fn from_softu_generic<const N: usize>(a: [Bit; N]) -> u64 {
     let mut v = 0u64;
     for i in 0..N {
@@ -97,6 +99,7 @@ pub fn softu32_add(a: SoftU32, b: SoftU32) -> (SoftU32, Bit) {
 // --- shifts (LSB-first) ---
 
 #[inline(always)]
+#[allow(clippy::manual_memcpy)] // easier to read this way
 pub fn shift_right_generic<const N: usize>(x: [Bit; N]) -> [Bit; N] {
     let mut r = [ZERO; N];
     for i in 0..N - 1 {
@@ -165,6 +168,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::neg_cmp_op_on_partial_ord)]
     fn add_softu32_simple() {
         // 23 + 19 = 42
         let a = to_softu32(23);
