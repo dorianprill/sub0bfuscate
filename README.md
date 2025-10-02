@@ -45,7 +45,7 @@ $$
 \{\rightarrow, 0\} 
 $$
 
- (read: IMPLICATION and a constant FALSE) is functionally complete. Interestingly, that is not the case for $\{\rightarrow, 0\}$ but I'll leave the proof up to you. When you have the IMPLY gate and a constant, it is possible to build other gates from which you can derive any Boolean function. We can prove this by building the set $\{\land, \neg\}$ from $\{\rightarrow, 0\}$ since we already know the former to be complete.    
+ (read: IMPLICATION and a constant FALSE) is functionally complete. Interestingly, that is not the case for $\{\rightarrow, 1\}$. When you have the IMPLY gate and a constant, it is possible to build other gates from which you can derive any Boolean function. We can prove this by building the set $\{\land, \neg\}$ from $\{\rightarrow, 0\}$ since we already know the former to be complete.    
 
 
 Given that the IMPLY operation can be defined as:
