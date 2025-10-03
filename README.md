@@ -1,10 +1,10 @@
 # sub0bfuscate
 
-## Turn *all* arithmetic operations into subtractions of 0.0 and -0.0 and an additional constant 0
+Turn *all* arithmetic operations into subtractions of 0.0 and -0.0 (and an additional constant 0) for code obfuscation, I guess.
 
 ## Inspiration
 
-[Tom Murphy VII](http://tom7.org/nand/nand.pdf) and [Orson Peters](https://orlp.net/blog/subtraction-is-functionally-complete/) (the basic implementation is continued from his code) for the original research (although it may have been known before, it was new to me) and [u/MyOthrUsrnmIsABook](https://www.reddit.com/user/MyOthrUsrnmIsABook/) for the not-quite-serious idea of actually using it. I'm just trying to be the dummy who actually follows through with it.
+[Tom Murphy VII](http://tom7.org/nand/nand.pdf) and [Orson Peters](https://orlp.net/blog/subtraction-is-functionally-complete/) (the basic implementation is continued from his code) for the original research (although it may have been known before, it was new to me). I just thought he didn't take it far enough for the full comedic effect.
 
 ## Principle
 
@@ -45,7 +45,7 @@ Now, since we found out that subtraction of the two distinct IEEE754 floating po
 The set
 
 $$
-\{\rightarrow, 0\}
+\lbrace\rightarrow,0\rbrace
 $$
 
  (read: IMPLICATION and a constant FALSE) is functionally complete. Interestingly, that is not the case for $\lbrace\rightarrow,1\rbrace$. When you have the IMPLY gate and a constant, it is possible to build other gates from which you can derive any Boolean function. We can prove this by building the set $\lbrace\land,\neg\rbrace$ from $\lbrace\rightarrow,0\rbrace$ since we already know the former to be complete.
@@ -119,7 +119,9 @@ Since computers are built using boolean logic, this in turn means that any arith
 
 We've established that we *can* build *EVERYTHING* from subtraction of the two IEEE754 floating point zeros and an additional constant 0. But how do we actually do it?
 
-Let's start by implementing our logic gates.
+Let's start by implementing our logic gates.  
+
+(Thanks to [Orson Peters](https://orlp.net/blog/subtraction-is-functionally-complete/) for the initial code)
 
 ```Rust
 type Bit = f32;
@@ -142,13 +144,99 @@ fn adder(a: Bit, b: Bit, c: Bit) -> (Bit, Bit) {
 }
 ```
 
-Then we proceed to build `soft integers` (like soft floats, but turned on its head) on top of our logic gates. That gives us basic arithmetic operations on integers.
+Then, using these primitives, we proceed to build `soft integers` (like soft floats, but turned on its head) on top of our logic gates. That gives us basic arithmetic operations on integers.
 
-**STOP!** I hear you say at this point. But oh no, friend, we're not done yet. We still need to implement floating point numbers. And since we are building soft floats on top of already soft integers, they must surely be called `softer floats`!
+```Rust
+struct SoftU8([Bit; 8]); // 8-bit unsigned integer
+// similarly SoftU23/24, SoftU32
+fn softu8_add(a: SoftU8, b: SoftU8) -> SoftU8 { ... }
+```
 
-After doing all this, we can now potentially replace *EVERY* arithmetic operation in *any* code with a combination of subtractions of the two IEEE754 floating point zeros and an additional constant 0.
+**STOP!** I hear you say at this point. But no, friend, we're not done yet. You see, Orson seems to be a reasonable Person satisfied with his result.  
+But we cannot rest until we have re-implemented soft floating point numbers on top of soft integers on top of hard floats to complete the cycle and put our minds at ease.
+And since we are building soft floats on top of already soft integers, they must surely be called `softer floats`!
+
+```Rust
+pub struct SofterF32 {
+    pub sign: Bit,
+    pub exponent: SoftU8,  // stored exponent (no bias removed)
+    pub fraction: SoftU23, // stored 23 bits (no implicit 1 here)
+}
+pub fn softerf32_add(a: SofterF32, b: SofterF32) -> SofterF32 { ... }
+```
+
+After doing all this, we can now potentially replace *EVERY* addition in *any* code with their evil twin - a combination of subtractions of the two IEEE754 floating point zeros (and an additional constant 0).
+
+Now, if our `SofterF32` implementation were to adhere to the IEEE754 standard, we could go further and implement another layer of *even softer* integers on top of the soft floats, but now even I begin to think we're pushing it.
+
+
+## Looking at the Generated Code
+Now, let's see what the generated LLVM IR looks like for the `softerf32_add` function (never inlined, and with the `softerf32_add` symbol preserved for easy lookup).
+
+First, we build a more portable release build for better comparison:
+
+```bash
+RUSTFLAGS="-C target-cpu=x86-64 -C opt-level=3" \
+cargo build --release --target x86_64-unknown-linux-gnu
+```
+
+Then, we can use `llvm-objdump` to generate the disassembly for the `softerf32_add` function and filter for the number of lines in the disassembly pertaining to the `softerf32_add` function, which gives us an idea of its complexity.  
+
+```bash
+llvm-objdump -d -C --no-show-raw-insn target/release/sub0bfuscate | awk '
+/^[0-9a-f]+ <[^>]+>:$/ {
+  name=$0
+  sub(/^[0-9a-f]+ +</,"",name); sub(/>:.*/,"",name)
+  keep = (name ~ /^sub0bfuscate::softcore::/) || (name ~ /^softerf32_/)
+  next
+}
+keep && /^[[:space:]]*[0-9a-f]+:\s/ { print }
+' | wc -l
+
+```
+
+On my machine, this outputs `1719` lines.  
+So, approximating one instruction per line, we can say that the `softerf32_add` function requires about 1719 instructions. This is quite a lot compared to a normal floating point addition, which typically uses just a handful of instructions for loading params, adding, and storing the result.
+
+
+Sanity check which functions were filtered: 
+
+```bash
+llvm-objdump -d -C --no-show-raw-insn target/release/sub0bfuscate | awk '
+/^[0-9a-f]+ <[^>]+>:$/ {
+  name=$0
+  sub(/^[0-9a-f]+ +</,"",name); sub(/>:.*/,"",name)
+  if (name ~ /^sub0bfuscate::softcore::/ || name ~ /^softerf32_/) print name
+}'
+```
+
+Which should show (although I am not sure why `softu24_add` is not included, maybe it got inlined anyway due to visibility or monomorphization):
+
+```
+sub0bfuscate::softcore::bitops::not::hcd535935072e2f86
+sub0bfuscate::softcore::bitops::or::h74512b828b43446f
+sub0bfuscate::softcore::bitops::and::h28001bf75618b28d
+sub0bfuscate::softcore::bitops::xor::h5627245ac43baf3c
+sub0bfuscate::softcore::bitops::adder::hcba00d0bffbcf38f
+sub0bfuscate::softcore::softerfloat::to_softerf32::hff2d59c252edbd3c
+sub0bfuscate::softcore::softerfloat::from_softerf32::hd8379f866c8cfe79
+softerf32_add
+```
+
+If you want to see the full disassembly of the `softerf32_add` function, run:
+
+```bash
+llvm-objdump -d -C --no-show-raw-insn target/release/sub0bfuscate \
+  | sed -n '/<softerf32_add>/,/<.*>:/p'
+```
+
+This will output the disassembly (AT&T/GNU syntax) for the `softerf32_add` function, which can be analyzed to see how the arithmetic operations have been transformed into subtractions of 0.0 and -0.0.
+You will see a lot of low level instructions like `xorps` (zero register), `movss` (load 0.0 from .rodata, this is heavily used), `pxor` (zeroing integer XOR), `subss` (the actual subtraction instruction for our NOT gate `not(x) = (-0.0) -x`), etc., which are the most relevant floating point operations used by our assembly.
+
+You may now ponder the comic absurdity of scrolling past all those `movss` instructions in the assembly.
 
 ## Status
 
-The obfuscator part is not fleshed out yet, I'm still working on the basic building blocks of arithmetic.
-It will probably involve rummaging around in LLVM IR, replacing arithmetic ops with function calls.
+This is not an actually usable obfuscator yet, maybe it never will - you know how it is with these tangential projects. 
+It will probably involve rummaging around in LLVM IR, replacing arithmetic ops with calls to the appropriate functions in this crate, and then letting LLVM optimize the result.  
+I am not sure I am qualified to do that.
