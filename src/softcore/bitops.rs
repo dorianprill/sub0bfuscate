@@ -40,26 +40,26 @@ impl BitExt for f32 {
 
 // Logic gates using only ±0.0 arithmetic.
 // RIGHT
-#[inline(always)]
+#[inline(never)]
 pub fn not(x: Bit) -> Bit {
     ZERO - x
 }
 
-#[inline(always)]
+#[inline(never)]
 pub fn or(a: Bit, b: Bit) -> Bit {
     a - not(b)
 }
-#[inline(always)]
+#[inline(never)]
 pub fn and(a: Bit, b: Bit) -> Bit {
     not(or(not(a), not(b)))
 }
-#[inline(always)]
+#[inline(never)]
 pub fn xor(a: Bit, b: Bit) -> Bit {
     or(and(not(a), b), and(a, not(b)))
 }
 
 // Full adder primitive.
-#[inline(always)]
+#[inline(never)]
 pub fn adder(a: Bit, b: Bit, c: Bit) -> (Bit, Bit) {
     let s = xor(xor(a, b), c);
     let cout = or(and(xor(a, b), c), and(a, b));

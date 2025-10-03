@@ -3,6 +3,7 @@ use super::softuint::{from_softu8, to_softu8, SoftU23, SoftU8};
 use super::softuint::{shift_right24, softu24_add, SoftU24};
 
 #[derive(Clone, Copy)]
+#[repr(C)]
 pub struct SofterF32 {
     pub sign: Bit,
     pub exponent: SoftU8,  // stored exponent (no bias removed)
@@ -11,6 +12,7 @@ pub struct SofterF32 {
 
 // pack/unpack with your existing approach
 #[allow(clippy::needless_range_loop)]
+#[inline(never)]
 pub fn to_softerf32(x: f32) -> SofterF32 {
     let bits = x.to_bits();
     let sign = if (bits >> 31) != 0 { ZERO } else { ONE }; // - => 0, + => 1
@@ -26,6 +28,7 @@ pub fn to_softerf32(x: f32) -> SofterF32 {
     }
 }
 
+#[inline(never)]
 pub fn from_softerf32(s: SofterF32) -> f32 {
     let mut bits: u32 = 0;
 
@@ -45,7 +48,9 @@ pub fn from_softerf32(s: SofterF32) -> f32 {
 
 // simple add (same-sign fast path), using 24-bit significands — minimal from earlier
 #[allow(clippy::comparison_chain)]
-pub fn softerf32_add(a: SofterF32, b: SofterF32) -> SofterF32 {
+#[no_mangle]
+#[inline(never)]
+pub extern "C" fn softerf32_add(a: SofterF32, b: SofterF32) -> SofterF32 {
     let a_exp = from_softu8(a.exponent) as i32;
     let b_exp = from_softu8(b.exponent) as i32;
 

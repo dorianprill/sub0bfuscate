@@ -9,7 +9,7 @@ pub type SoftU32 = [Bit; 32];
 
 // --- encode/decode ---
 
-#[inline(always)]
+#[inline(never)]
 #[allow(clippy::needless_range_loop)]
 pub fn to_softu_generic<const N: usize>(x: u64) -> [Bit; N] {
     let mut out = [ZERO; N];
@@ -19,24 +19,24 @@ pub fn to_softu_generic<const N: usize>(x: u64) -> [Bit; N] {
     out
 }
 
-#[inline(always)]
+#[inline(never)]
 pub fn to_softu8(x: u8) -> SoftU8 {
     to_softu_generic::<8>(x as u64)
 }
-#[inline(always)]
+#[inline(never)]
 pub fn to_softu23(x: u32) -> SoftU23 {
     to_softu_generic::<23>(x as u64)
 }
-#[inline(always)]
+#[inline(never)]
 pub fn to_softu24(x: u32) -> SoftU24 {
     to_softu_generic::<24>(x as u64)
 }
-#[inline(always)]
+#[inline(never)]
 pub fn to_softu32(x: u32) -> SoftU32 {
     to_softu_generic::<32>(x as u64)
 }
 
-#[inline(always)]
+#[inline(never)]
 #[allow(clippy::needless_range_loop)]
 pub fn from_softu_generic<const N: usize>(a: [Bit; N]) -> u64 {
     let mut v = 0u64;
@@ -48,26 +48,26 @@ pub fn from_softu_generic<const N: usize>(a: [Bit; N]) -> u64 {
     v
 }
 
-#[inline(always)]
+#[inline(never)]
 pub fn from_softu8(a: SoftU8) -> u8 {
     from_softu_generic(a) as u8
 }
-#[inline(always)]
+#[inline(never)]
 pub fn from_softu23(a: SoftU23) -> u32 {
     from_softu_generic(a) as u32
 }
-#[inline(always)]
+#[inline(never)]
 pub fn from_softu24(a: SoftU24) -> u32 {
     from_softu_generic(a) as u32
 }
-#[inline(always)]
+#[inline(never)]
 pub fn from_softu32(a: SoftU32) -> u32 {
     from_softu_generic(a) as u32
 }
 
 // --- adders (return (sum, carry)) ---
 
-#[inline(always)]
+#[inline(never)]
 pub fn softu_add_generic<const N: usize>(a: [Bit; N], b: [Bit; N]) -> ([Bit; N], Bit) {
     let mut out = [ZERO; N];
     let mut carry = ZERO;
@@ -79,26 +79,26 @@ pub fn softu_add_generic<const N: usize>(a: [Bit; N], b: [Bit; N]) -> ([Bit; N],
     (out, carry)
 }
 
-#[inline(always)]
+#[inline(never)]
 pub fn softu8_add(a: SoftU8, b: SoftU8) -> (SoftU8, Bit) {
     softu_add_generic(a, b)
 }
-#[inline(always)]
+#[inline(never)]
 pub fn softu23_add(a: SoftU23, b: SoftU23) -> (SoftU23, Bit) {
     softu_add_generic(a, b)
 }
-#[inline(always)]
+#[inline(never)]
 pub fn softu24_add(a: SoftU24, b: SoftU24) -> (SoftU24, Bit) {
     softu_add_generic(a, b)
 }
-#[inline(always)]
+#[inline(never)]
 pub fn softu32_add(a: SoftU32, b: SoftU32) -> (SoftU32, Bit) {
     softu_add_generic(a, b)
 }
 
 // --- shifts (LSB-first) ---
 
-#[inline(always)]
+#[inline(never)]
 #[allow(clippy::manual_memcpy)] // easier to read this way
 pub fn shift_right_generic<const N: usize>(x: [Bit; N]) -> [Bit; N] {
     let mut r = [ZERO; N];
@@ -108,15 +108,15 @@ pub fn shift_right_generic<const N: usize>(x: [Bit; N]) -> [Bit; N] {
     r
 }
 
-#[inline(always)]
+#[inline(never)]
 pub fn shift_right23(x: SoftU23) -> SoftU23 {
     shift_right_generic(x)
 }
-#[inline(always)]
+#[inline(never)]
 pub fn shift_right24(x: SoftU24) -> SoftU24 {
     shift_right_generic(x)
 }
-#[inline(always)]
+#[inline(never)]
 pub fn shift_right32(x: SoftU32) -> SoftU32 {
     shift_right_generic(x)
 }
